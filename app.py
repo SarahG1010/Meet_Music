@@ -5,13 +5,21 @@
 import json
 import dateutil.parser
 import babel
-from flask import Flask, render_template, request, Response, flash, redirect, url_for
+from flask import Flask, render_template, request, Response, flash, redirect, url_for,abort
 from flask_moment import Moment
 from flask_sqlalchemy import SQLAlchemy
 import logging
 from logging import Formatter, FileHandler
 from flask_wtf import Form
 from forms import *
+## import migrate
+from flask_migrate import Migrate
+## import itertools
+import itertools
+##
+from sqlalchemy import exc, and_
+
+
 #----------------------------------------------------------------------------#
 # App Config.
 #----------------------------------------------------------------------------#
@@ -20,6 +28,10 @@ app = Flask(__name__)
 moment = Moment(app)
 app.config.from_object('config')
 db = SQLAlchemy(app)
+## define migrate
+migrate = Migrate(app, db)
+
+
 
 # TODO: connect to a local postgresql database
 
@@ -31,31 +43,255 @@ class Venue(db.Model):
     __tablename__ = 'Venue'
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
-    city = db.Column(db.String(120))
-    state = db.Column(db.String(120))
-    address = db.Column(db.String(120))
+    name = db.Column(db.String, nullable=False)
+    genres = db.Column(db.String, nullable=False)
+    city = db.Column(db.String(120),nullable=False)
+    state = db.Column(db.String(120),nullable=False)
+    address = db.Column(db.String(120),nullable=False)
     phone = db.Column(db.String(120))
     image_link = db.Column(db.String(500))
     facebook_link = db.Column(db.String(120))
+    website = db.Column(db.String(120))
+    seeking_talent = db.Column(db.Boolean)
+    seeking_description = db.Column(db.String)
 
     # TODO: implement any missing fields, as a database migration using Flask-Migrate
+    
+    ## initialize venue model:
+    def __init__(self, name, genres, city, state, address, phone,image_link, facebook_link,website,seeking_talent,seeking_description):
+        self.name = name
+        self.genres = genres
+        self.city = city
+        self.state = state
+        self.address = address
+        self.phone = phone
+        self.facebook_link = facebook_link
+        self.image_link = image_link
+        self.website = website
+        self.seeking_talent = seeking_talent
+        self.seeking_description = seeking_description
+
+    ## initiate __getitem__ method for easy access the venue object
+    ## accessing items using square bracket notation ([]) on instances of a class
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+
+    ## initiate __repr__ method for define a string representation of an object
+    ## debug prupose
+    def __repr__(self):
+        return f'<Venue name={self.name}, city={self.city}, state={self.state}, address={self.address}, past_shows_count={self.past_shows_count}, upcoming_shows_count={self.upcoming_shows_count}>'
+
+
+    ## define show_template for venue model
+    def format(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'genres': self.genres.split(', '),
+            'address': self.address,
+            'city': self.city,
+            'state': self.state,
+            'phone': self.phone,
+            'website': self.website,
+            'facebook_link': self.facebook_link,
+            'seeking_talent': self.seeking_talent,
+            'seeking_description': self.seeking_description,
+            'image_link': self.image_link,
+            'past_shows': self.past_shows,
+            'upcoming_shows': self.upcoming_shows,
+            'past_shows_count': self.past_shows_count,
+            'upcoming_shows_count': self.upcoming_shows_count
+        }
+
+    ## this method is inspired by Trivia_API_project
+    ## define revisions for venue model:
+    def insert(self):
+        db.session.add(self)
+        db.session.commit()
+
+    def update(self):
+        db.session.commit()
+
+    def delete(self):
+        db.session.delete(self)
+        db.session.commit()   
+
+    ## define upcoming shows and upcoming show counts
+    @property
+    def upcoming_shows(self):
+        upcoming_shows = list(filter(lambda show: show.start_time > datetime.now(), self.shows))
+        
+        return [{'artist_name': show.artist.name,
+                 'artist_id': show.artist.id,
+                 'start_time': show.start_time.isoformat()
+                 'artist_image_link': show.artist.image_link,
+                } for show in upcoming_shows]
+    
+     @property
+    def upcoming_shows_count(self):
+        return len(self.upcoming_shows)
+
+    ## define past shows and past show counts
+    @property
+    def past_shows(self):
+        past_shows = list(filter(lambda show: show.start_time < datetime.now(), self.shows))
+        
+        return [{'artist_name': show.artist.name,
+                 'artist_id': show.artist.id,
+                 'start_time': show.start_time.isoformat(),
+                 'artist_image_link': show.artist.image_link
+                } for show in past_shows]
+
+    @property
+    def past_shows_count(self):
+        return len(self.past_shows)
+    
 
 class Artist(db.Model):
     __tablename__ = 'Artist'
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String)
-    city = db.Column(db.String(120))
-    state = db.Column(db.String(120))
+    name = db.Column(db.String,nullable=False)
+    genres = db.Column(db.String(120), nullable=False)
+    city = db.Column(db.String(120), nullable=False)
+    state = db.Column(db.String(120), nullable=False)
     phone = db.Column(db.String(120))
-    genres = db.Column(db.String(120))
-    image_link = db.Column(db.String(500))
+    website = db.Column(db.String(120))
     facebook_link = db.Column(db.String(120))
+    seeking_venue = db.Column(db.Boolean)
+    seeking_description = db.Column(db.String)
+    image_link = db.Column(db.String(500))
 
     # TODO: implement any missing fields, as a database migration using Flask-Migrate
+    ## initialize artist model:
+    def __init__(self, name, genres, city, state, phone, facebook_link,website,seeking_venue,seeking_description,image_link):
+        self.name = name
+        self.genres = genres
+        self.city = city
+        self.state = state
+        self.phone = phone
+        self.facebook_link = facebook_link
+        self.website = website
+        self.seeking_venue = seeking_venue
+        self.seeking_description = seeking_description
+        self.image_link = image_link
+
+    ## define show_template for artist model
+    def format(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'genres': self.genres.split(', '),
+            'city': self.city,
+            'state': self.state,
+            'phone': self.phone,
+            'website': self.website,
+            'facebook_link': self.facebook_link,
+            'seeking_venue': self.seeking_venue,
+            'seeking_description': self.seeking_description,
+            'image_link': self.image_link,
+            'past_shows': self.past_shows,
+            'upcoming_shows': self.upcoming_shows,
+            'past_shows_count': self.past_shows_count,
+            'upcoming_shows_count': self.upcoming_shows_count
+        }
+
+    ## initiate __getitem__ method for easy access the venue object
+    ## accessing items using square bracket notation ([]) on instances of a class
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+
+    ## initiate __repr__ method for define a string representation of an object
+    def __repr__(self):
+        return f'<Artist name={self.name}, city={self.city}, state={self.state}, genres={self.genres}, past_shows_count={self.past_shows_count}, upcoming_shows_count={self.upcoming_shows_count}>'    
+
+    ## define revisions for artist model:
+    def insert(self):
+        db.session.add(self)
+        db.session.commit()
+
+    def update(self):
+        db.session.commit()
+
+
+    ## implement properties for artist model:
+    @property
+    def past_shows(self):
+        past_shows = list(filter(lambda show: show.start_time < datetime.now(), self.shows))
+        return [{'venue_id': show.venue.id,
+                'venue_name': show.venue.name,
+                'venue_image_link': show.venue.image_link,
+                'start_time': show.start_time.isoformat()
+            } for show in past_shows]
+
+    @property
+    def upcoming_shows(self):
+        upcoming_shows = list(filter(lambda show: show.start_time > datetime.now(), self.shows))
+        return [{'venue_id': show.venue.id,
+                'venue_name': show.venue.name,
+                'venue_image_link': show.venue.image_link,
+                'start_time': show.start_time.isoformat()
+            } for show in upcoming_shows]
+
+    @property
+    def past_shows_count(self):
+        return len(self.past_shows)
+
+    @property
+    def upcoming_shows_count(self):
+        return len(self.upcoming_shows)
+
+    
 
 # TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.
+class Show(db.Model):
+    __tablename__ = 'Show'
+
+    id = db.Column(db.Integer, primary_key=True)
+    venue_id = db.Column(db.Integer, db.ForeignKey('Venue.id'), nullable=False)
+    artist_id = db.Column(db.Integer, db.ForeignKey('Artist.id'), nullable=False)
+    start_time = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+    venue = db.relationship('Venue', backref='shows', lazy=True)
+    artist = db.relationship('Artist', backref='shows', lazy=True)
+    
+    ## initialize show model:
+    def __init__(self, venue_id, artist_id, start_time):
+      self.venue_id = venue_id
+      self.artist_id = artist_id
+      self.start_time = start_time
+
+    ## initiate __getitem__ method for easy access the venue object
+    ## accessing items using square bracket notation ([]) on instances of a class
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+
+    ## initiate __repr__ method for define a string representation of an object
+    def __repr__(self):
+      return f'<Show start_time={self.start_time}, venue={self.venue}, artist={self.artist}>'
+
+    ## define revisions for show model:
+    def insert(self):
+        db.session.add(self)
+        db.session.commit()
+
+    def update(self):
+        db.session.commit()
+
+    ## define show_template for show model
+    def format(self):
+        return {
+            'venue_id': self.venue.id,
+            'venue_name': self.venue.name,
+            'artist_id': self.artist.id,
+            'artist_name': self.artist.name,
+            'artist_image_link': self.artist.image_link,
+            'start_time': self.start_time.isoformat()
+        }
+
+  
 
 #----------------------------------------------------------------------------#
 # Filters.

@@ -326,13 +326,10 @@ def venues():
     sortby = lambda v: (v['city'], v['state'])
     sort_grouped_venues = itertools.groupby(sorted(venues, key=sortby), key=sortby)
 
-    data = [
-        {
+    data = [{'venues': list(value),
             'city': city_state[0],
-            'state': city_state[1],
-            'venues': list(value)
-        }
-        for city_state, value in sort_grouped_venues]  
+            'state': city_state[1]
+            }for city_state, value in sort_grouped_venues]  
     
     return render_template('pages/venues.html', areas=data)
 
@@ -351,7 +348,8 @@ def search_venues():
                         'name': venue.name,
                         'num_upcoming_shows': venue.upcoming_shows_count
                         }for venue in venues_fromsearch]
-    response = {'data': list(venues_response), 'count': len(venues_fromsearch)}
+    response = {'data': list(venues_response), 
+                'count': len(venues_fromsearch)}
     return render_template('pages/search_venues.html', results=response, search_term=request.form.get('search_term', ''))
 
 ## venue details page route  

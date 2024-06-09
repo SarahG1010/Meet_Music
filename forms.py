@@ -7,24 +7,12 @@ from flask_wtf import FlaskForm
 class ShowForm(Form):
     
     artist_id = StringField(
-        'artist_id'
+        'artist_id', validators=[DataRequired()]
     )
     venue_id = StringField(
-        'venue_id'
+        'venue_id',validators=[DataRequired()]
     )
     
-    artist = SelectField(
-        'artist',
-        coerce=int,
-        validators=[DataRequired(), NoneOf(
-            values=[0], message='Invalid option. You must choose any of the options below')]
-    )
-    venue = SelectField(
-        'venue',
-        coerce=int,
-        validators=[DataRequired(), NoneOf(
-            values=[0], message='Invalid option. You must choose any of the options below')]
-    )
     start_time = DateTimeField(
         'start_time',
         validators=[DataRequired()],
